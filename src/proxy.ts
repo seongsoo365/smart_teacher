@@ -1,9 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-// 로그인 없이 접근 가능한 경로
-const PUBLIC_PATHS = ['/', '/auth'];
-
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -35,25 +32,37 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // OAuth 콜백은 항상 통과
-  if (pathname.startsWith('/auth/callback')) {
+  // OAuth 콜백·카카오 인증 경로는 항상 통과
+  if (pathname.startsWith('/auth/callback') || pathname.startsWith('/auth/kakao')) {
     return supabaseResponse;
   }
 
-  // 보호 경로에 비로그인 접근 → /auth 리다이렉트
-  const isPublic = PUBLIC_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(p + '/')
-  );
-
-  if (!isPublic && !user) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = '/auth';
-    loginUrl.searchParams.set('redirectTo', pathname);
-    return NextResponse.redirect(loginUrl);
+  // 비로그인: / 와 /auth 만 허용
+  if (!user) {
+    const isPublic = pathname === '/' || pathname === '/auth' || pathname.startsWith('/auth/');
+    if (!isPublic) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = '/auth';
+      loginUrl.searchParams.set('redirectTo', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return supabaseResponse;
   }
 
-  // 이미 로그인한 사용자가 /auth 접근 → 홈으로
-  if (pathname === '/auth' && user) {
+  // 로그인됨: app_metadata로 권한 확인 (추가 DB 쿼리 없음)
+  const isAdmin = user.app_metadata?.role === 'admin';
+  const isApproved = isAdmin || user.app_metadata?.is_approved === true;
+
+  if (!isApproved) {
+    // 미승인 사용자는 /pending 만 허용
+    if (pathname !== '/pending') {
+      return NextResponse.redirect(new URL('/pending', request.url));
+    }
+    return supabaseResponse;
+  }
+
+  // 승인된 사용자가 /auth 또는 /pending 접근 → 홈으로
+  if (pathname === '/auth' || pathname === '/pending') {
     return NextResponse.redirect(new URL('/', request.url));
   }
 

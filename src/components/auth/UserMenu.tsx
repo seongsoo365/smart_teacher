@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
-import { LogOut, ChevronDown, UserCircle2 } from 'lucide-react';
+import { LogOut, ChevronDown, UserCircle2, ShieldCheck } from 'lucide-react';
 
 export function UserMenu() {
   const router = useRouter();
@@ -88,6 +88,15 @@ export function UserMenu() {
             <p className="truncate text-sm font-semibold text-gray-800">{displayName}</p>
             <p className="truncate text-xs text-gray-400">{user.email}</p>
           </div>
+          {user.app_metadata?.role === 'admin' && (
+            <a
+              href="/admin"
+              className="flex items-center gap-2 px-4 py-3 text-sm text-purple-600 hover:bg-purple-50"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              사용자 관리
+            </a>
+          )}
           <button
             onClick={handleSignOut}
             className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-600 hover:bg-red-50"
