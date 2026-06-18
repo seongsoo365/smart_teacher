@@ -36,15 +36,17 @@ export function AuthPage({ redirectTo = '/', hasError = false }: AuthPageProps) 
 
   const handleSocialLogin = async (provider: 'kakao' | 'google') => {
     setLoadingProvider(provider);
+
+    if (provider === 'kakao') {
+      // 이메일 동의 요청 없이 직접 카카오 OAuth 시작
+      window.location.href = `/auth/kakao?redirectTo=${encodeURIComponent(redirectTo)}`;
+      return;
+    }
+
     const callbackUrl = `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`;
-
-    // 카카오는 이메일 동의항목 없이 닉네임·프로필만 요청
-    // Supabase가 kakao_[id]@kakao.com 형태의 가상 이메일로 사용자 생성
-    const scopes = provider === 'kakao' ? 'profile_nickname profile_image' : undefined;
-
     await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: callbackUrl, scopes },
+      options: { redirectTo: callbackUrl },
     });
   };
 

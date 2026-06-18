@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // 로그인 없이 접근 가능한 경로
 const PUBLIC_PATHS = ['/', '/auth'];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
