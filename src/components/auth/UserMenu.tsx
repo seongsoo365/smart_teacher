@@ -8,19 +8,19 @@ import { LogOut, ChevronDown, UserCircle2, ShieldCheck } from 'lucide-react';
 
 export function UserMenu() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
 
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    // getUser()로 서버에서 최신 app_metadata를 가져옴 (getSession은 JWT 로컬 디코딩이라 구버전일 수 있음)
+    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
 
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session) {
-        // session.user는 JWT 로컬 디코딩이라 app_metadata가 구버전일 수 있음
-        // getUser()로 서버에서 최신 app_metadata를 가져옴
         const { data } = await supabase.auth.getUser();
         setUser(data.user ?? null);
       } else {

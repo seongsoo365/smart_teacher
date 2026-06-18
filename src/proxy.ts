@@ -61,6 +61,11 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // admin 전용 경로: admin이 아니면 홈으로
+  if (pathname.startsWith('/admin') && !isAdmin) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   // 승인된 사용자가 /auth 또는 /pending 접근 → 홈으로
   if (pathname === '/auth' || pathname === '/pending') {
     return NextResponse.redirect(new URL('/', request.url));

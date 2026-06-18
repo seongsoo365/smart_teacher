@@ -17,13 +17,21 @@ npx tsc --noEmit # 타입 검사 (빌드 전 확인용)
 
 ## 환경변수
 
-`.env.local`에 아래 키가 반드시 필요하다. 없으면 AI API 라우트 전체가 500 오류를 반환한다.
+`.env.local`에 아래 키가 모두 필요하다.
 
 ```
+# AI (없으면 AI API 라우트 전체 500)
 GOOGLE_GENERATIVE_AI_API_KEY=...
-```
 
-키 발급: https://aistudio.google.com/apikey
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...   # 서버 전용 (관리자 API, 카카오 인증)
+
+# 카카오 OAuth (없으면 카카오 로그인 불가)
+KAKAO_CLIENT_ID=...
+KAKAO_CLIENT_SECRET=...         # 선택 (카카오 앱 설정에 따라)
+```
 
 ## 아키텍처 개요
 
@@ -33,11 +41,12 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 
 ```
 src/lib/ai.ts          ← callGemini() 공통 래퍼
-src/lib/prompts.ts     ← 프롬프트 빌더 3개 (문제생성·채점·카운슬러)
+src/lib/prompts.ts     ← 프롬프트 빌더 4개 (문제생성·채점·카운슬러·학습콘텐츠)
 src/app/api/
   generate-problem/    ← POST: topicId + difficulty → Problem JSON
   evaluate-answer/     ← POST: problem + studentAnswer → isCorrect + feedback
   counselor/           ← POST: problem + attempt → LearningGuide JSON
+  generate-content/    ← POST: topicId → LearningContent JSON (개념 설명)
 ```
 
 **객관식 채점은 AI를 쓰지 않는다.** `evaluate-answer` 라우트에서 문자열 일치로 서버에서 직접 판단한다. AI 채점은 단답형·서술형에만 사용한다.
@@ -51,6 +60,50 @@ src/app/api/
 - Topic ID 패턴: `m1-phy-01`(중1 물리), `m2-chem-01`(중2 화학), `hi-01`(통합과학), `hp1-01`(물리1), `hc1-01`(화학1), `hb1-01`(생명1), `he1-01`(지구1)
 - `getTopicById(id)`, `getCurriculumByGrade(gradeLevel)`, `getAllTopics()` 유틸 함수 제공
 - 단원을 추가하려면 해당 배열에 `Topic` 객체를 추가하기만 하면 된다.
+
+### Supabase 계층
+
+```
+src/lib/supabase/
+  client.ts   ← 브라우저 클라이언트 (createBrowserClient)
+  server.ts   ← 서버 컴포넌트 / Route Handler 클라이언트 (createServerClient + cookies())
+  admin.ts    ← Service Role 클라이언트 (서버 전용, 사용자 관리)
+  db.ts       ← DB 쿼리 함수 (getProfile, updateProfile, loadAllProgress, upsertTopicProgress)
+```
+
+DB 테이블: `profiles` (학생 프로필), `topic_progress` (단원별 진도). `upsertTopicProgress`는 `(user_id, topic_id)` 복합 키로 upsert한다.
+
+`SupabaseSync` 컴포넌트(`src/components/auth/SupabaseSync.tsx`)가 `layout.tsx`에 전역 배치되어, `onAuthStateChange` 이벤트를 구독하고 로그인 시 DB 데이터를 Zustand 스토어로 동기화한다.
+
+### 인증 흐름 (Kakao + Supabase)
+
+카카오는 Supabase 기본 OAuth provider가 아니므로 직접 구현한다:
+
+```
+/auth/kakao (GET)
+  → 카카오 OAuth URL로 redirect, state 쿠키 설정
+
+/auth/callback/kakao (GET)
+  → 카카오 토큰 교환 → 프로필 조회
+  → Supabase admin.createUser() (이미 존재하면 무시)
+  → admin.generateLink(magiclink) → action_link 서버에서 직접 fetch
+  → access_token/refresh_token 추출 → supabase.auth.setSession()
+  → 세션 쿠키를 redirect 응답에 직접 부착
+```
+
+**일반 소셜 로그인** (`/auth/callback`)은 Supabase 기본 `exchangeCodeForSession()`을 쓴다.
+
+### 미들웨어
+
+`src/proxy.ts`가 미들웨어로 동작한다 (파일명이 `middleware.ts`가 아님). 세션 갱신 + 라우트 보호:
+
+- 비로그인 → `/`, `/auth` 외 모든 경로를 `/auth?redirectTo=...`로 리다이렉트
+- 미승인 사용자 (`app_metadata.is_approved !== true`) → `/pending` 으로 강제
+- `app_metadata.role === 'admin'`이면 승인 없이도 전체 접근 가능
+
+### 사용자 승인 시스템
+
+신규 가입자는 `app_metadata.is_approved`가 없어 `/pending`에 머문다. 관리자(`role: admin`)가 `/admin` 페이지에서 `POST /api/admin/approve`를 호출해 `is_approved: true`로 변경한다. 관리자 계정은 Supabase 대시보드에서 `app_metadata`를 직접 수정해 생성한다.
 
 ### 상태 관리 (Zustand)
 
