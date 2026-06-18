@@ -41,6 +41,10 @@ yarn-error.log*
 .claude/settings.json
 .mcp.json
 
+# playwright (검증용 임시 파일)
+.playwright-mcp/
+*.png
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

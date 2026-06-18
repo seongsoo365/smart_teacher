@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { UserApprovalTable } from '@/components/admin/UserApprovalTable';
 import { Users } from 'lucide-react';
 
+const dev = process.env.NODE_ENV === 'development';
+
 export default async function AdminPage() {
   const supabase = await createClient();
   const {
@@ -11,8 +13,11 @@ export default async function AdminPage() {
   } = await supabase.auth.getUser();
 
   if (!user || user.app_metadata?.role !== 'admin') {
+    if (dev) console.log(`[admin/page] 권한 없음(${user?.email ?? '비로그인'}) → / 리다이렉트`);
     redirect('/');
   }
+
+  if (dev) console.log(`[admin/page] 어드민(${user.email}) 페이지 진입 — 사용자 목록 조회 시작`);
 
   const adminClient = createAdminClient();
   const { data } = await adminClient.auth.admin.listUsers({ perPage: 1000 });
@@ -32,6 +37,8 @@ export default async function AdminPage() {
   }));
 
   const pending = users.filter((u) => !u.isApproved).length;
+
+  if (dev) console.log(`[admin/page] 사용자 목록 로드 완료 — 전체: ${users.length}, 승인 대기: ${pending}`);
 
   return (
     <div className="space-y-6">

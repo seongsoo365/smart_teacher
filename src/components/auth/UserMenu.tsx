@@ -16,16 +16,26 @@ export function UserMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // getUser()로 서버에서 최신 app_metadata를 가져옴 (getSession은 JWT 로컬 디코딩이라 구버전일 수 있음)
-    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
+    const dev = process.env.NODE_ENV === 'development';
 
+    // INITIAL_SESSION이 즉시 발화하므로 별도 getUser() 불필요
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        const { data } = await supabase.auth.getUser();
-        setUser(data.user ?? null);
-      } else {
+      if (!session) {
+        if (dev) console.log(`[UserMenu] 인증 상태 변경(${_event}) — 로그아웃`);
         setUser(null);
+        return;
       }
+
+      // getUser()로 최신 app_metadata 확보, 실패 시 JWT 클레임(session.user) 폴백
+      const { data, error } = await supabase.auth.getUser();
+      const u = error ? session.user : (data.user ?? session.user);
+      if (dev) console.log(`[UserMenu] 인증 상태 변경(${_event})`, {
+        email: u.email,
+        role: u.app_metadata?.role ?? '(없음)',
+        isAdmin: u.app_metadata?.role === 'admin',
+        ...(error ? { getUser_error: error.message } : {}),
+      });
+      setUser(u);
     });
 
     return () => listener.subscription.unsubscribe();
