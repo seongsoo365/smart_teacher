@@ -126,17 +126,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/auth?error=oauth`);
     }
 
-    // 6. 서버 측에서 세션을 쿠키에 저장
+    // 6. 세션 쿠키를 redirect 응답에 직접 설정
     const cookieStore = await cookies();
+    const sessionCookies: { name: string; value: string; options: Record<string, unknown> }[] = [];
+
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return cookieStore.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
+          // cookieStore 대신 배열에 수집 → redirect 응답에 직접 부착
+          cookiesToSet.forEach((c) => sessionCookies.push(c));
         },
       },
     });
@@ -153,6 +154,12 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(new URL(redirectTo, origin));
     response.cookies.delete('kakao_oauth_state');
     response.cookies.delete('kakao_redirect_to');
+
+    // Supabase 세션 쿠키를 redirect 응답에 직접 부착
+    sessionCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options as Parameters<typeof response.cookies.set>[2]);
+    });
+
     return response;
   } catch {
     return NextResponse.redirect(`${origin}/auth?error=oauth`);
