@@ -17,8 +17,15 @@ export function UserMenu() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        // session.user는 JWT 로컬 디코딩이라 app_metadata가 구버전일 수 있음
+        // getUser()로 서버에서 최신 app_metadata를 가져옴
+        const { data } = await supabase.auth.getUser();
+        setUser(data.user ?? null);
+      } else {
+        setUser(null);
+      }
     });
 
     return () => listener.subscription.unsubscribe();
